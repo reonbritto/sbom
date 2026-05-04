@@ -92,13 +92,14 @@ security(deps): bump next to 15.2.4
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| [ci.yml](.github/workflows/ci.yml) | push, PR | lint → typecheck/build → test → CodeQL SAST → Gitleaks → npm audit → CycloneDX SBOM → Trivy fs → Docker build → Trivy image scan → Docker push (main only) |
+| [ci.yml](.github/workflows/ci.yml) | push, PR | lint → typecheck/build → test → CodeQL SAST → Snyk SCA → Gitleaks → npm audit → CycloneDX SBOM → Trivy fs → Docker build → Trivy image scan → Docker push (main only) |
 | [lint-pr.yml](.github/workflows/lint-pr.yml) | PR open | Conventional Commits check on PR title |
 
 ### Required GitHub repo secrets
 
 | Secret | Purpose |
 |---|---|
+| `SNYK_TOKEN` | Snyk SCA SARIF upload to GitHub Security tab |
 | `DOCKERHUB_USERNAME` | DockerHub login + image namespace |
 | `DOCKERHUB_TOKEN` | DockerHub access token (Account → Security → New Access Token) |
 
