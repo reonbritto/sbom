@@ -2,8 +2,8 @@
 
 Upload a CycloneDX or SPDX Software Bill of Materials. See every known vulnerability affecting your components — enriched with real-world exploit probability, active-exploitation flags, attacker techniques, and one-click fix suggestions.
 
-[![CI](https://github.com/reonbritto/sbom/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/reonbritto/sbom/actions/workflows/ci.yml)
-[![Release](https://github.com/reonbritto/sbom/actions/workflows/release-please.yml/badge.svg?branch=main)](https://github.com/reonbritto/sbom/actions/workflows/release-please.yml)
+[![CI](https://github.com/reonbritto/sbom-analyzer/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/reonbritto/sbom-analyzer/actions/workflows/ci.yml)
+[![Release](https://github.com/reonbritto/sbom-analyzer/actions/workflows/release-please.yml/badge.svg?branch=main)](https://github.com/reonbritto/sbom-analyzer/actions/workflows/release-please.yml)
 [![DockerHub](https://img.shields.io/docker/v/reonbritto/sbom-vuln-analyzer/latest?logo=docker&label=DockerHub)](https://hub.docker.com/r/reonbritto/sbom-vuln-analyzer)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -47,8 +47,8 @@ You'll see risk scores, KEV banners, ATT&CK mappings, EPSS percentiles, and reco
 ## Quick start
 
 ```sh
-git clone https://github.com/reonbritto/sbom
-cd sbom
+git clone https://github.com/reonbritto/sbom-analyzer
+cd sbom-analyzer
 cp .env.example .env
 docker compose up --build
 ```

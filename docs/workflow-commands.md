@@ -168,20 +168,20 @@ gh secret delete OLD_SECRET
 
 ```sh
 # List rulesets
-gh api repos/reonbritto/sbom/rulesets
+gh api repos/reonbritto/sbom-analyzer/rulesets
 
 # Show one
-gh api repos/reonbritto/sbom/rulesets/15941161
+gh api repos/reonbritto/sbom-analyzer/rulesets/15941161
 
 # Required check names + bypass actors
-gh api repos/reonbritto/sbom/rulesets/15941161 \
+gh api repos/reonbritto/sbom-analyzer/rulesets/15941161 \
   --jq '{checks: [.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context], bypass: .bypass_actors}'
 
 # Update (PUT — full ruleset spec required)
-gh api repos/reonbritto/sbom/rulesets/15941161 --method PUT --input ruleset.json
+gh api repos/reonbritto/sbom-analyzer/rulesets/15941161 --method PUT --input ruleset.json
 
 # Delete a ruleset
-gh api repos/reonbritto/sbom/rulesets/15941161 --method DELETE
+gh api repos/reonbritto/sbom-analyzer/rulesets/15941161 --method DELETE
 ```
 
 ---
