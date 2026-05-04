@@ -89,12 +89,12 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
           queries: security-and-quality
-      - uses: github/codeql-action/autobuild@v3
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/autobuild@v4
+      - uses: github/codeql-action/analyze@v4
         with:
           category: "/language:javascript-typescript"
 
@@ -133,7 +133,7 @@ jobs:
 
       - name: Upload Snyk SARIF
         if: ${{ always() && hashFiles('snyk.sarif') != '' }}
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: snyk.sarif
           category: snyk-node
@@ -226,40 +226,39 @@ jobs:
           ignore-unfixed: true
       - name: Upload SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-fs.sarif
           category: trivy-filesystem
 
   # ──────────────────────────────────────────────
-  # Docker Build → DockerHub
-  # On PR: build only, don't push (to validate the Dockerfile still works)
-  # On push to main: build + push :latest + :sha-<sha>
+  # Docker: BUILD → SCAN → PUSH
+  #   1. Build the image to a local tarball (no push)
+  #   2. Trivy scan the tarball
+  #   3. If scan passes AND we're on main, login + push
+  # PR runs stop after the scan (no push).
+  # A scan finding CRITICAL/HIGH fixable vulns FAILS the job and aborts the push.
   # ──────────────────────────────────────────────
   docker:
-    name: Docker (build & push)
+    name: Docker (build → scan → push)
     runs-on: ubuntu-latest
     needs: [lint, typecheck-build, test, sast, secrets, audit, sbom, trivy-fs]
     permissions:
       contents: read
+      security-events: write
     outputs:
-      image: ${{ steps.meta.outputs.tags }}
-      digest: ${{ steps.build.outputs.digest }}
       sha-tag: ${{ steps.shorten.outputs.tag }}
+      image-ref: ${{ steps.shorten.outputs.image-ref }}
     steps:
       - uses: actions/checkout@v4
 
       - id: shorten
-        run: echo "tag=sha-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+        run: |
+          SHORT=sha-$(echo ${{ github.sha }} | cut -c1-7)
+          echo "tag=$SHORT" >> $GITHUB_OUTPUT
+          echo "image-ref=${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:$SHORT" >> $GITHUB_OUTPUT
 
       - uses: docker/setup-buildx-action@v3
-
-      - name: Login to DockerHub
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Compute tags
         id: meta
@@ -270,12 +269,14 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-,format=short
 
-      - name: Build (and push on main)
+      # ── 1. BUILD (no push) ──────────────────────
+      - name: Build image (load to local docker)
         id: build
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          push: false
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -283,41 +284,53 @@ jobs:
           provenance: true
           sbom: true
 
-  # ──────────────────────────────────────────────
-  # Trivy image scan (only after image was pushed to DockerHub)
-  # ──────────────────────────────────────────────
-  trivy-image:
-    name: Trivy (image)
-    runs-on: ubuntu-latest
-    needs: [docker]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Trivy image scan (SARIF)
+      # ── 2. TRIVY SCAN the just-built image ──────
+      - name: Trivy image scan (SARIF, advisory)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.sha-tag }}
+          image-ref: ${{ steps.shorten.outputs.image-ref }}
           format: sarif
           severity: CRITICAL,HIGH
           output: trivy-image.sarif
           ignore-unfixed: true
+          exit-code: '0'           # SARIF run never fails the job; the gate run below does
           vuln-type: library
 
-      - name: Upload SARIF
+      - name: Upload Trivy image SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-image.sarif
           category: trivy-image
 
-      - name: Trivy image scan (table for log readability)
+      - name: Trivy image scan (table — readable summary)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.sha-tag }}
+          image-ref: ${{ steps.shorten.outputs.image-ref }}
           format: table
           severity: CRITICAL,HIGH
-          exit-code: '0'
+          exit-code: '0'           # do not fail the job here, the gate is below
+
+      - name: Trivy GATE (fixable CRITICAL/HIGH = fail)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.shorten.outputs.image-ref }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true     # only fail on vulns that have a fix available
+          exit-code: '1'
+
+      # ── 3. PUSH (only on main, only if all steps above passed) ──
+      - name: Login to DockerHub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push to DockerHub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            docker push "$tag"
+          done
