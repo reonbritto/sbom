@@ -242,189 +242,123 @@ jobs:
           category: trivy-filesystem
 
   # ──────────────────────────────────────────────
-  # 1) BUILD — produce a single-arch tarball, no push, no manifest list
+  # Stage: Docker Build
   # ──────────────────────────────────────────────
   docker-build:
-    name: Docker (build)
+    name: Docker Build
     runs-on: ubuntu-latest
-    needs: [lint, typecheck-build, test, sast, secrets, audit, sbom, trivy-fs]
-    permissions:
-      contents: read
-    outputs:
-      sha-tag: ${{ steps.shorten.outputs.tag }}
-      image-ref: ${{ steps.shorten.outputs.image-ref }}
-      tags: ${{ steps.meta.outputs.tags }}
+    needs: [lint, typecheck-build, test, sast, sca, secrets, audit, sbom, trivy-fs]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - id: shorten
-        run: |
-          SHORT=sha-$(echo ${{ github.sha }} | cut -c1-7)
-          echo "tag=$SHORT"                                                                  >> $GITHUB_OUTPUT
-          echo "image-ref=${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:$SHORT"    >> $GITHUB_OUTPUT
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Compute tags + labels
+      - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix=sha-,format=short
+            type=raw,value=latest
+            type=sha,prefix=,format=short
 
-      - name: Build image to tarball (single-arch, no manifest list)
+      - name: Build and save Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64
-          provenance: false                       # avoids manifest-list export
-          sbom: false                             # avoids manifest-list export
+          provenance: false
+          sbom: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          outputs: type=docker,dest=/tmp/image.tar
+          outputs: type=docker,dest=/tmp/docker-image.tar
 
-      - name: Upload image tarball as artifact
+      - name: Upload Docker image artifact
         uses: actions/upload-artifact@v4
         with:
           name: docker-image
-          path: /tmp/image.tar
+          path: /tmp/docker-image.tar
           retention-days: 1
 
   # ──────────────────────────────────────────────
-  # 2) SCAN — Trivy on the built image (advisory SARIF + GATE)
+  # Stage: Trivy Container Scan
   # ──────────────────────────────────────────────
-  trivy-image:
-    name: Trivy (image)
+  trivy-scan:
+    name: Trivy Container Scan
     runs-on: ubuntu-latest
     needs: [docker-build]
     permissions:
       contents: read
       security-events: write
     steps:
-      - name: Download image artifact
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Docker image artifact
         uses: actions/download-artifact@v4
         with:
           name: docker-image
           path: /tmp
 
-      - name: Load image and re-tag for scanning
-        id: load
-        run: |
-          set -euo pipefail
-          docker load --input /tmp/image.tar
-          # Pick the first loaded tag and re-tag it locally so Trivy has a
-          # stable, non-secret reference to scan.
-          loaded=$(docker images --format '{{.Repository}}:{{.Tag}}' \
-            | grep -v '<none>' \
-            | grep -E "${{ env.IMAGE_NAME }}|sbom-vuln-analyzer" \
-            | head -1)
-          if [ -z "$loaded" ]; then
-            echo "::error ::no image loaded from /tmp/image.tar"
-            docker images
-            exit 1
-          fi
-          echo "Loaded: $loaded"
-          docker tag "$loaded" local/sbom-app:scan
-          docker images local/sbom-app:scan
+      - name: Load Docker image
+        run: docker load -i /tmp/docker-image.tar
 
-      - name: Trivy image scan (SARIF, advisory)
+      - name: Trivy image scan (table — OS + app)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: local/sbom-app:scan
-          format: sarif
-          severity: CRITICAL,HIGH
-          output: trivy-image.sarif
-          ignore-unfixed: true
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+          format: table
           exit-code: '0'
+          severity: CRITICAL,HIGH
+          output: trivy-report.txt
+
+      - name: Trivy image scan (SARIF — app dependencies only)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+          format: sarif
+          exit-code: '0'
+          severity: CRITICAL,HIGH
+          output: trivy-results.sarif
           vuln-type: library
 
-      - name: Upload Trivy image SARIF
+      - name: Upload Trivy SARIF to GitHub Security
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: trivy-image.sarif
-          category: trivy-image
+          sarif_file: trivy-results.sarif
+          category: container-scanning
 
-      - name: Trivy image scan (table — readable summary)
-        uses: aquasecurity/trivy-action@master
+      - name: Upload Trivy scan report
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          image-ref: local/sbom-app:scan
-          format: table
-          severity: CRITICAL,HIGH
-          exit-code: '0'
-
-      # Gate intentionally disabled: Trivy findings are reported via SARIF
-      # to the Security tab + summarized in logs, but do not block the build.
+          name: trivy-report
+          path: |
+            trivy-report.txt
+            trivy-results.sarif
 
   # ──────────────────────────────────────────────
-  # 3) PUSH — only on main
+  # Stage: Docker Push to DockerHub
   # ──────────────────────────────────────────────
   docker-push:
-    name: Docker (push to DockerHub)
+    name: Docker Push
     runs-on: ubuntu-latest
-    needs: [docker-build, trivy-image]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
+    needs: [trivy-scan]
     steps:
-      - name: Verify required secrets are present
-        env:
-          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
-          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "${DH_USER:-}" ]; then
-            echo "::error ::DOCKERHUB_USERNAME secret is not set"
-            exit 1
-          fi
-          if [ -z "${DH_TOKEN:-}" ]; then
-            echo "::error ::DOCKERHUB_TOKEN secret is not set"
-            exit 1
-          fi
-          echo "DH_USER length=${#DH_USER}, DH_TOKEN length=${#DH_TOKEN}"
-
-      - name: Download image artifact
+      - name: Download Docker image artifact
         uses: actions/download-artifact@v4
         with:
           name: docker-image
           path: /tmp
 
-      - name: Load image and compute tags
-        id: tags
-        env:
-          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
-        run: |
-          set -euo pipefail
-          docker load --input /tmp/image.tar
-          echo "Loaded images:"
-          docker images --format '  {{.Repository}}:{{.Tag}}'
-
-          SHORT=sha-$(echo ${{ github.sha }} | cut -c1-7)
-          # Pick whatever the loaded tag is (the build step tagged it via metadata-action)
-          loaded=$(docker images --format '{{.Repository}}:{{.Tag}}' \
-            | grep -v '<none>' \
-            | grep -E "${IMAGE_NAME}|${DH_USER}" \
-            | head -1)
-          if [ -z "$loaded" ]; then
-            echo "::error ::no image found after docker load"
-            docker images
-            exit 1
-          fi
-          echo "Loaded reference: $loaded"
-
-          # Re-tag for DockerHub regardless of what the build step originally produced.
-          docker tag "$loaded" "${DH_USER}/${IMAGE_NAME}:latest"
-          docker tag "$loaded" "${DH_USER}/${IMAGE_NAME}:${SHORT}"
-
-          echo "latest=${DH_USER}/${IMAGE_NAME}:latest"  >> $GITHUB_OUTPUT
-          echo "sha=${DH_USER}/${IMAGE_NAME}:${SHORT}"   >> $GITHUB_OUTPUT
-          echo "::notice ::Will push ${DH_USER}/${IMAGE_NAME}:latest and :${SHORT}"
+      - name: Load Docker image
+        run: docker load -i /tmp/docker-image.tar
 
       - name: Login to DockerHub
         uses: docker/login-action@v3
@@ -432,13 +366,8 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Push :latest
-        run: docker push "${{ steps.tags.outputs.latest }}"
-
-      - name: Push :sha-xxxxxxx
-        run: docker push "${{ steps.tags.outputs.sha }}"
-
-      - name: Done
+      - name: Push Docker image
         run: |
-          echo "::notice ::Pushed: ${{ steps.tags.outputs.latest }}"
-          echo "::notice ::Pushed: ${{ steps.tags.outputs.sha }}"
+          docker images --format '{{.Repository}}:{{.Tag}}' | grep ${{ env.IMAGE_NAME }} | while read tag; do
+            docker push "$tag"
+          done
