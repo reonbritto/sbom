@@ -17,7 +17,7 @@ export async function POST() {
   } catch {
     try {
       buf = await readFile(join(process.cwd(), 'public', 'demo-sbom.json'));
-    } catch (err) {
+    } catch {
       return NextResponse.json(
         { error: 'demo SBOM not bundled with this build' },
         { status: 500 },
