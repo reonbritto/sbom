@@ -25,6 +25,7 @@ jobs:
   lint:
     name: Lint (ESLint)
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -42,6 +43,7 @@ jobs:
   typecheck-build:
     name: TypeCheck & Build
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -66,6 +68,7 @@ jobs:
   test:
     name: Tests (Vitest)
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -83,6 +86,7 @@ jobs:
   sast:
     name: SAST (CodeQL)
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     permissions:
       security-events: write
       actions: read
@@ -104,6 +108,7 @@ jobs:
   sca:
     name: SCA (Snyk)
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     permissions:
       security-events: write
       contents: read
@@ -144,6 +149,7 @@ jobs:
   secrets:
     name: Secrets (Gitleaks)
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -158,6 +164,7 @@ jobs:
   audit:
     name: npm audit
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -175,6 +182,7 @@ jobs:
   sbom:
     name: SBOM (CycloneDX)
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -220,6 +228,7 @@ jobs:
   trivy-fs:
     name: Trivy (filesystem)
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     permissions:
       security-events: write
       contents: read
@@ -248,6 +257,14 @@ jobs:
     name: Docker Build
     runs-on: ubuntu-latest
     needs: [lint, typecheck-build, test, sast, sca, secrets, audit, sbom, trivy-fs]
+    # Run if either:
+    #   - on PR and all quality jobs succeeded, OR
+    #   - on push-to-main (quality jobs are skipped there by their own if:)
+    # The `always()` + `!contains(...failure)` lets skipped jobs not block us.
+    if: |
+      always() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -291,6 +308,7 @@ jobs:
     name: Trivy Container Scan
     runs-on: ubuntu-latest
     needs: [docker-build]
+    if: github.event_name == 'pull_request'
     permissions:
       contents: read
       security-events: write
@@ -348,7 +366,7 @@ jobs:
   docker-push:
     name: Docker Push
     runs-on: ubuntu-latest
-    needs: [trivy-scan]
+    needs: [docker-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Download Docker image artifact
