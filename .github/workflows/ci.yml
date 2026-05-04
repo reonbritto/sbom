@@ -34,7 +34,7 @@ jobs:
       - run: npm ci --no-audit --no-fund --legacy-peer-deps
       - run: npx prisma generate
       - name: ESLint
-        run: npx next lint --max-warnings=0
+        run: npx eslint . --max-warnings=0
 
   # ──────────────────────────────────────────────
   # TypeCheck + Build
