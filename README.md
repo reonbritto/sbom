@@ -1,109 +1,117 @@
 # SBOM Vulnerability Analyzer
 
-Upload a CycloneDX or SPDX SBOM, get every known vulnerability affecting its components — enriched with EPSS exploit probability, CISA KEV flags, OpenSSF Scorecard, NVD CWE/CVE detail, MITRE ATT&CK mapping, and recommended fix versions.
+Upload a CycloneDX or SPDX Software Bill of Materials. See every known vulnerability affecting your components — enriched with real-world exploit probability, active-exploitation flags, attacker techniques, and one-click fix suggestions.
 
-[![CI](https://github.com/reon/sbom/actions/workflows/ci.yml/badge.svg)](https://github.com/reon/sbom/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
 ## What it does
 
-| Capability | Source | Why it matters |
+You give it an SBOM. It tells you what's actually dangerous.
+
+| Capability | What you see | Source |
 |---|---|---|
-| Component vuln lookup | OSV.dev | Per-package vulnerability resolution from purl + version |
-| Exploit probability | FIRST.org EPSS | "Patch the 6.5 with 91% chance, not the 9.8 with 0.04%" |
-| Active exploitation flag | CISA KEV catalog (bulk-cached) | Federal patch deadlines for CVEs known to be exploited |
-| CWE classification + ATT&CK mapping | NVD + curated CWE→ATT&CK table | "If exploited, what does the attacker do?" |
-| Package reputation | deps.dev (Google) | OpenSSF Scorecard, popularity, malicious flag |
-| Typosquat / supply-chain detection | Reputation-aware heuristics | Catches event-stream / ua-parser-js style attacks |
-| Composite risk score | CVSS + EPSS + KEV + reputation | One number per component, with rationale |
-| One-version fix planner | OSV ranges | The single upgrade that fixes the most CVEs |
-| NTIA quality lint | CycloneDX/SPDX schema check | Surfaces missing supplier, missing dep relationships |
-| Reports | JSON / CycloneDX VEX / printable HTML | Hand to auditors / Dependency-Track / customers |
+| **Component vulnerability lookup** | Every CVE per package version | [OSV.dev](https://osv.dev) |
+| **EPSS exploit probability** | "This 6.5 has 91% exploit chance — patch first; that 9.8 has 0.04% — defer" | [FIRST.org](https://www.first.org/epss) |
+| **CISA KEV active-exploitation flag** | Red banner + federal patch deadline for CVEs being exploited in the wild | [CISA KEV catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) |
+| **CVE / CWE / NVD detail** | Full advisory with weakness classification | NVD API |
+| **MITRE ATT&CK mapping** | "If exploited, what does the attacker do?" — tactics + techniques | Curated CWE → ATT&CK |
+| **Package reputation** | Popularity, OpenSSF Scorecard score, malicious flag | [deps.dev](https://deps.dev) |
+| **Typosquat / supply-chain detection** | Catches `event-stream`-style attacks (typo'd lookalikes, suspicious newcomers) | Reputation-aware heuristics |
+| **Composite risk score** | One number per component (0–100), with rationale | CVSS + EPSS + KEV + reputation |
+| **One-version fix planner** | The single upgrade that resolves the most CVEs at once | OSV affected-version ranges |
+| **NTIA Minimum Elements lint** | Surfaces missing supplier, version, dependency relationships in the SBOM itself | CycloneDX/SPDX schema |
+| **Reports** | JSON · CycloneDX VEX · printable HTML | Built-in exporters |
 
 ---
 
-## Stack
+## Demo
 
-- **Next.js 15** (App Router) + React 19 + Tailwind 4 + shadcn/ui + Recharts
-- **Better Auth** (self-hosted email/password, Argon2id, sessions in Postgres)
-- **Prisma** + **Postgres 16**
-- **ioredis** + **Redis 7** (TTL cache for OSV/EPSS/NVD/deps.dev/KEV)
-- **prom-client** for `/api/metrics`
-- **Docker / docker-compose** for local
+After signing up, click **Load demo SBOM**. The bundled demo includes:
+
+- `log4j-core@2.14.1` — Log4Shell, CVSS 10, in CISA KEV
+- `requests@2.30.0` — Python HTTP library with known CVEs
+- `lodash@4.17.20` — classic prototype-pollution era
+- `xml2js@0.4.23` — prototype pollution again
+- `event-stream-typo` — fake typosquat to demo the supply-chain detector
+- a few clean components for contrast
+
+You'll see risk scores, KEV banners, ATT&CK mappings, EPSS percentiles, and recommended fixes within ~10 seconds.
 
 ---
 
 ## Quick start
 
 ```sh
+git clone https://github.com/reonbritto/sbom
+cd sbom
 cp .env.example .env
 docker compose up --build
 ```
 
-Open http://localhost:3000 — sign up, click **Load demo SBOM**.
+Open http://localhost:3000 — sign up, then click **Load demo SBOM**.
 
----
+The full stack runs in docker-compose: Postgres for storage, Redis for caching enriched vulnerability data, plus Prometheus + Grafana + Loki for local observability.
 
-## Repo layout
+### Configuration
 
-```
-.
-├── app/              Next.js routes (App Router)
-├── components/       shadcn UI + bespoke (RiskBadge, KevBadge, EpssBadge, …)
-├── lib/              domain logic (osv-client, epss-client, kev-catalog, scan, risk-score, …)
-├── prisma/           schema (Better Auth + Analysis/Component/Vuln tables)
-├── data/             sample SBOMs (incl. Log4Shell demo)
-├── tests/            vitest
-├── monitoring/       prometheus / grafana / loki / promtail configs (local docker-compose)
-└── .github/          CI workflows + governance
-```
+The defaults work out of the box. To tune behaviour, edit `.env`:
 
-GitOps manifests (Kustomize, Argo Apps) live in [`reon/sbom-platform`](https://github.com/reon/sbom-platform).
-
----
-
-## Development
-
-```sh
-npm install --legacy-peer-deps
-npm run dev          # next dev on :3000
-npm run test         # vitest
-npm run lint         # next lint
-npm run typecheck    # tsc --noEmit
-```
-
-### Branching
-
-Trunk-based. Short-lived `feat/`, `fix/`, `chore/` branches → squash-merge to `main`. Releases will eventually be annotated tags `vX.Y.Z`.
-
-PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/) — enforced by [.github/workflows/lint-pr.yml](.github/workflows/lint-pr.yml).
-
-```
-feat(scan): add SBOM diff endpoint
-fix(auth): handle expired session cookie
-security(deps): bump next to 15.2.4
-```
-
----
-
-## CI
-
-| Workflow | Trigger | What it does |
+| Variable | Default | Purpose |
 |---|---|---|
-| [ci.yml](.github/workflows/ci.yml) | push, PR | lint → typecheck/build → test → CodeQL SAST → Snyk SCA → Gitleaks → npm audit → CycloneDX SBOM → Trivy fs → Docker build → Trivy image scan → Docker push (main only) |
-| [lint-pr.yml](.github/workflows/lint-pr.yml) | PR open | Conventional Commits check on PR title |
+| `MAX_SBOM_BYTES` | `10485760` (10 MB) | File-size cap on uploads |
+| `MAX_COMPONENTS` | `10000` | Component cap per SBOM |
+| `OSV_CONCURRENCY` | `10` | Parallel OSV.dev lookups |
+| `CACHE_TTL_SECONDS` | `3600` | Redis cache TTL for component lookups |
+| `VULN_CACHE_TTL_SECONDS` | `86400` | Cache TTL for full vulnerability records |
 
-### Required GitHub repo secrets
+---
 
-| Secret | Purpose |
-|---|---|
-| `SNYK_TOKEN` | Snyk SCA SARIF upload to GitHub Security tab |
-| `DOCKERHUB_USERNAME` | DockerHub login + image namespace |
-| `DOCKERHUB_TOKEN` | DockerHub access token (Account → Security → New Access Token) |
+## How it works
 
-ACR push, Cosign signing, Harness webhook, GitOps trigger, Terraform plan/apply will be added later — currently deferred.
+```
+   ┌─────────────────────────┐
+   │  CycloneDX or SPDX JSON │
+   └────────────┬────────────┘
+                ▼
+   ┌──────────────────────────────────────────────┐
+   │  Parse → extract purl + version per component│
+   └────────────┬─────────────────────────────────┘
+                ▼
+   ┌──────────────────────────────────────────────┐
+   │  Enrichment pipeline (parallel, cached)      │
+   │  ├─ OSV.dev      → CVEs + advisory metadata  │
+   │  ├─ FIRST EPSS   → exploit probability       │
+   │  ├─ CISA KEV     → active-exploitation flag  │
+   │  ├─ NVD          → full CVE + CWE detail     │
+   │  └─ deps.dev     → Scorecard + reputation    │
+   └────────────┬─────────────────────────────────┘
+                ▼
+   ┌──────────────────────────────────────────────┐
+   │  Score + plan                                │
+   │  ├─ Composite risk score (CVSS · EPSS · KEV) │
+   │  ├─ Typosquat / supply-chain detector        │
+   │  ├─ MITRE ATT&CK technique mapping           │
+   │  └─ One-version fix recommendation           │
+   └────────────┬─────────────────────────────────┘
+                ▼
+   ┌──────────────────────────────────────────────┐
+   │  UI · API · Reports (JSON · VEX · HTML)      │
+   └──────────────────────────────────────────────┘
+```
+
+All external API responses are cached in Redis (1 h for OSV component queries, 24 h for full vuln records, 24 h for KEV catalog) so re-uploading the same SBOM is near-instant.
+
+---
+
+## Built with
+
+- **Next.js 15** (App Router) + React 19 + Tailwind + shadcn/ui + Recharts
+- **Better Auth** — self-hosted email/password, Argon2id-hashed, sessions in Postgres
+- **Prisma** + **Postgres 16** for persistence
+- **Redis 7** for the enrichment cache
+- **prom-client** for `/api/metrics`
 
 ---
 
