@@ -1,0 +1,136 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-01-15T00:00:00Z",
+    "tools": [{ "vendor": "sbom-vuln-analyzer", "name": "demo-fixture" }],
+    "component": {
+      "type": "application",
+      "name": "demo-app",
+      "version": "1.0.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "log4j-core",
+      "version": "2.14.1",
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
+      "description": "Log4Shell — CVE-2021-44228, the canonical 10/10 remote code execution vulnerability. EPSS p99.",
+      "licenses": [{ "license": { "id": "Apache-2.0" } }]
+    },
+    {
+      "type": "library",
+      "name": "spring-core",
+      "version": "5.3.18",
+      "purl": "pkg:maven/org.springframework/spring-core@5.3.18",
+      "description": "Spring4Shell era — CVE-2022-22965. High-CVSS, high-EPSS.",
+      "licenses": [{ "license": { "id": "Apache-2.0" } }]
+    },
+    {
+      "type": "library",
+      "name": "django",
+      "version": "2.2.0",
+      "purl": "pkg:pypi/django@2.2.0",
+      "description": "Old Django release with multiple stacked CVEs — exercises fix-version planner.",
+      "licenses": [{ "license": { "id": "BSD-3-Clause" } }]
+    },
+    {
+      "type": "library",
+      "name": "lodash",
+      "version": "4.17.15",
+      "purl": "pkg:npm/lodash@4.17.15",
+      "description": "Prototype pollution era — multiple CVEs, all fixable by single upgrade.",
+      "licenses": [{ "license": { "id": "MIT" } }]
+    },
+    {
+      "type": "library",
+      "name": "pyyaml",
+      "version": "5.1",
+      "purl": "pkg:pypi/pyyaml@5.1",
+      "description": "Pre-FullLoader-default arbitrary code execution.",
+      "licenses": [{ "license": { "id": "MIT" } }]
+    },
+    {
+      "type": "library",
+      "name": "minimist",
+      "version": "1.2.0",
+      "purl": "pkg:npm/minimist@1.2.0",
+      "description": "Prototype pollution. Tiny package, easy to demo a low-Scorecard high-CVSS combo.",
+      "licenses": [{ "license": { "id": "MIT" } }]
+    },
+    {
+      "type": "library",
+      "name": "requests",
+      "version": "2.32.3",
+      "purl": "pkg:pypi/requests@2.32.3",
+      "description": "Modern, well-maintained, no known vulns — contrast for the dashboard.",
+      "licenses": [{ "license": { "id": "Apache-2.0" } }]
+    },
+    {
+      "type": "library",
+      "name": "fastapi",
+      "version": "0.115.0",
+      "purl": "pkg:pypi/fastapi@0.115.0",
+      "description": "Clean modern Python web framework — high Scorecard, no CVEs.",
+      "licenses": [{ "license": { "id": "MIT" } }]
+    },
+    {
+      "type": "library",
+      "name": "react",
+      "version": "18.3.1",
+      "purl": "pkg:npm/react@18.3.1",
+      "description": "Popular, healthy package — baseline.",
+      "licenses": [{ "license": { "id": "MIT" } }]
+    },
+    {
+      "type": "library",
+      "name": "reqeusts",
+      "version": "1.0.0",
+      "purl": "pkg:pypi/reqeusts@1.0.0",
+      "description": "Typosquat of 'requests' — should be flagged with high confidence (low reputation, edit distance 2 on long word).",
+      "licenses": [{ "license": { "id": "MIT" } }]
+    },
+    {
+      "type": "library",
+      "name": "expres",
+      "version": "0.0.1",
+      "purl": "pkg:npm/expres@0.0.1",
+      "description": "Typosquat of 'express' — single-release, low-version package with similar name.",
+      "licenses": [{ "license": { "id": "MIT" } }]
+    },
+    {
+      "type": "library",
+      "name": "crypto-wallet-helper",
+      "version": "1.0.0",
+      "purl": "pkg:npm/crypto-wallet-helper@1.0.0",
+      "description": "Suspicious-name pattern (crypto + wallet keywords).",
+      "licenses": []
+    },
+    {
+      "type": "library",
+      "name": "jackson-databind",
+      "version": "2.9.10",
+      "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.9.10",
+      "description": "Long history of deserialization CVEs — many vulns, exercise stacked-vuln rationale.",
+      "licenses": [{ "license": { "id": "Apache-2.0" } }]
+    },
+    {
+      "type": "library",
+      "name": "commons-collections",
+      "version": "3.2.1",
+      "purl": "pkg:maven/commons-collections/commons-collections@3.2.1",
+      "description": "Classic Java deserialization gadget chain.",
+      "licenses": [{ "license": { "id": "Apache-2.0" } }]
+    },
+    {
+      "type": "library",
+      "name": "axios",
+      "version": "0.21.0",
+      "purl": "pkg:npm/axios@0.21.0",
+      "description": "SSRF + ReDoS — moderate severity, fixable by single upgrade.",
+      "licenses": [{ "license": { "id": "MIT" } }]
+    }
+  ]
+}

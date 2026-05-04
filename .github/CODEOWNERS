@@ -1,0 +1,9 @@
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-security/customizing-your-repository/about-code-owners
+
+* @reon
+
+# Solo owner today; switch to per-path teams when collaborators arrive:
+# /app/                  @reon @app-team
+# /infra/                @reon @platform-team
+# /.github/workflows/    @reon @platform-team
+# /scripts/rotate-*      @reon @security-team

@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Better Auth tables ──────────────────────────────────────────────────
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  analyses      Analysis[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+}
+
+// ─── App tables ──────────────────────────────────────────────────────────
+model Analysis {
+  id              String      @id @default(uuid())
+  ownerId         String
+  filename        String
+  format          String
+  specVersion     String
+  status          String
+  componentCount  Int
+  vulnerableCount Int         @default(0)
+  maliciousCount  Int         @default(0)
+  riskScore       Int         @default(0)
+  isDemo          Boolean     @default(false)
+  rawSbom         Json
+  createdAt       DateTime    @default(now())
+  owner           User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  components      Component[]
+
+  @@index([ownerId, createdAt(sort: Desc)])
+}
+
+model Component {
+  id                  String                   @id @default(uuid())
+  analysisId          String
+  purl                String
+  name                String
+  version             String
+  ecosystem           String?
+  licenses            Json
+  vulnCount           Int                      @default(0)
+  maxSeverity         String?
+  maxEpss             Float?
+  isMalicious         Boolean                  @default(false)
+  maliciousReason     String?
+  maliciousDetail     String?
+  maliciousConfidence String?
+  scorecardScore      Float?
+  versionsCount       Int?
+  firstPublished      DateTime?
+  recommendedFix      String?
+  hasKev              Boolean                  @default(false)
+  riskScore           Int                      @default(0)
+  riskBand            String?
+  riskRationale       Json?
+  analysis            Analysis                 @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  vulnerabilities     ComponentVulnerability[]
+
+  @@index([analysisId])
+  @@index([analysisId, maxSeverity])
+  @@index([analysisId, isMalicious])
+}
+
+model ComponentVulnerability {
+  componentId    String
+  vulnId         String
+  primaryCve     String?
+  aliases        Json?
+  cweIds         Json?
+  severity       String
+  cvssScore      Float?
+  epssScore      Float?
+  epssPercentile Float?
+  isMalicious    Boolean   @default(false)
+  isKev          Boolean   @default(false)
+  kevDueDate     DateTime?
+  component      Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@id([componentId, vulnId])
+  @@index([primaryCve])
+  @@index([isKev])
+}

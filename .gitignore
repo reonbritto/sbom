@@ -1,0 +1,30 @@
+node_modules/
+.next/
+out/
+dist/
+build/
+
+# secrets and local env
+.env
+.env.local
+.env*.local
+
+# logs and OS noise
+*.log
+.DS_Store
+Thumbs.db
+
+# coverage / test outputs
+coverage/
+*.lcov
+test-results.xml
+sbom.json
+sbom.xml
+
+# editor
+.vscode/
+.idea/
+.claude/
+
+# prisma local sqlite
+prisma/migrations/dev.db*

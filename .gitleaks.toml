@@ -1,0 +1,21 @@
+title = "gitleaks config — sbom-vuln-analyzer"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "ignore non-secret paths"
+paths = [
+  '''(.*?)(jpg|jpeg|gif|png|svg|webp|woff|woff2|ttf)$''',
+  '''package-lock\.json''',
+  '''node_modules/''',
+  '''\.next/''',
+  '''dist/''',
+  '''data/.*\.json''',
+  '''docs/''',
+]
+
+# Allow long random hex in comments / examples
+regexes = [
+  '''replace-with-32-byte-hex-openssl-rand-hex-32''',
+]

@@ -1,0 +1,323 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+env:
+  NODE_VERSION: "20"
+  IMAGE_NAME: sbom-vuln-analyzer
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Lint
+  # ──────────────────────────────────────────────
+  lint:
+    name: Lint (ESLint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund --legacy-peer-deps
+      - run: npx prisma generate
+      - name: ESLint
+        run: npx next lint --max-warnings=0
+
+  # ──────────────────────────────────────────────
+  # TypeCheck + Build
+  # ──────────────────────────────────────────────
+  typecheck-build:
+    name: TypeCheck & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund --legacy-peer-deps
+      - run: npx prisma generate
+      - name: tsc --noEmit
+        run: npx tsc --noEmit
+      - name: Next.js build
+        run: npm run build
+        env:
+          BETTER_AUTH_SECRET: dummy-ci-secret-not-a-real-key-32bytes
+          BETTER_AUTH_URL: http://localhost:3000
+          DATABASE_URL: postgresql://user:pass@localhost:5432/db
+          REDIS_URL: redis://localhost:6379
+
+  # ──────────────────────────────────────────────
+  # Tests
+  # ──────────────────────────────────────────────
+  test:
+    name: Tests (Vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund --legacy-peer-deps
+      - run: npx prisma generate
+      - name: Vitest
+        run: npx vitest run --reporter=default
+
+  # ──────────────────────────────────────────────
+  # SAST (CodeQL)
+  # ──────────────────────────────────────────────
+  sast:
+    name: SAST (CodeQL)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
+
+  # ──────────────────────────────────────────────
+  # SCA (Snyk) — uses SNYK_TOKEN
+  # ──────────────────────────────────────────────
+  sca:
+    name: SCA (Snyk)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund --legacy-peer-deps
+
+      - name: Snyk test (severity threshold = medium)
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=medium
+        continue-on-error: true
+
+      - name: Snyk test → SARIF
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --sarif-file-output=snyk.sarif
+        continue-on-error: true
+
+      - name: Upload Snyk SARIF
+        if: ${{ always() && hashFiles('snyk.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk.sarif
+          category: snyk-node
+
+  # ──────────────────────────────────────────────
+  # Secrets (gitleaks)
+  # ──────────────────────────────────────────────
+  secrets:
+    name: Secrets (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ──────────────────────────────────────────────
+  # Dependency audit (cheap belt-and-braces alongside Snyk)
+  # ──────────────────────────────────────────────
+  audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund --legacy-peer-deps
+      - name: npm audit (high+)
+        run: npm audit --audit-level=high --omit=dev
+        continue-on-error: true
+
+  # ──────────────────────────────────────────────
+  # SBOM (CycloneDX) — application source SBOM
+  # ──────────────────────────────────────────────
+  sbom:
+    name: SBOM (CycloneDX)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund --legacy-peer-deps
+      - name: Generate CycloneDX SBOM (JSON)
+        run: npx --yes @cyclonedx/cyclonedx-npm --output-file sbom.json --output-format JSON --omit dev
+      - name: Generate CycloneDX SBOM (XML)
+        run: npx --yes @cyclonedx/cyclonedx-npm --output-file sbom.xml --output-format XML --omit dev
+      - name: Summary
+        run: |
+          node -e "
+            const sbom = JSON.parse(require('fs').readFileSync('sbom.json', 'utf8'));
+            const c = sbom.components || [];
+            console.log('Total components:', c.length);
+            c.slice(0, 30).forEach(x => console.log('  -', x.name + '@' + (x.version || '?')));
+            if (c.length > 30) console.log('  ... and', c.length - 30, 'more');
+          "
+      - name: Upload SBOM
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            sbom.json
+            sbom.xml
+
+  # ──────────────────────────────────────────────
+  # Trivy filesystem scan (catches bad deps before image build)
+  # ──────────────────────────────────────────────
+  trivy-fs:
+    name: Trivy (filesystem)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy fs scan (SARIF)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          severity: CRITICAL,HIGH
+          output: trivy-fs.sarif
+          ignore-unfixed: true
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-filesystem
+
+  # ──────────────────────────────────────────────
+  # Docker Build → DockerHub
+  # On PR: build only, don't push (to validate the Dockerfile still works)
+  # On push to main: build + push :latest + :sha-<sha>
+  # ──────────────────────────────────────────────
+  docker:
+    name: Docker (build & push)
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck-build, test, sast, secrets, audit, sbom, trivy-fs]
+    permissions:
+      contents: read
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+      digest: ${{ steps.build.outputs.digest }}
+      sha-tag: ${{ steps.shorten.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: shorten
+        run: echo "tag=sha-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Compute tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+
+      - name: Build (and push on main)
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+  # ──────────────────────────────────────────────
+  # Trivy image scan (only after image was pushed to DockerHub)
+  # ──────────────────────────────────────────────
+  trivy-image:
+    name: Trivy (image)
+    runs-on: ubuntu-latest
+    needs: [docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy image scan (SARIF)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.sha-tag }}
+          format: sarif
+          severity: CRITICAL,HIGH
+          output: trivy-image.sarif
+          ignore-unfixed: true
+          vuln-type: library
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      - name: Trivy image scan (table for log readability)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.sha-tag }}
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '0'

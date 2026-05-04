@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@layer base {
+  :root, html[data-theme='dark'] {
+    --background: 222 24% 7%;
+    --foreground: 220 14% 91%;
+    --card: 224 22% 9%;
+    --card-foreground: 220 14% 91%;
+    --popover: 224 22% 9%;
+    --popover-foreground: 220 14% 91%;
+    --primary: 218 100% 71%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 18% 13%;
+    --secondary-foreground: 220 14% 91%;
+    --muted: 222 18% 13%;
+    --muted-foreground: 220 9% 65%;
+    --accent: 222 18% 13%;
+    --accent-foreground: 220 14% 91%;
+    --destructive: 350 100% 65%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 17% 16%;
+    --input: 220 17% 16%;
+    --ring: 218 100% 71%;
+    --critical: 350 100% 65%;
+    --high: 22 100% 63%;
+    --medium: 42 100% 67%;
+    --low: 153 53% 63%;
+    --radius: 0.625rem;
+    color-scheme: dark;
+  }
+
+  html[data-theme='light'] {
+    --background: 220 27% 97%;
+    --foreground: 220 13% 13%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 13% 13%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 13% 13%;
+    --primary: 217 84% 56%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 95%;
+    --secondary-foreground: 220 13% 13%;
+    --muted: 220 14% 95%;
+    --muted-foreground: 220 9% 41%;
+    --accent: 220 14% 95%;
+    --accent-foreground: 220 13% 13%;
+    --destructive: 348 71% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 14% 88%;
+    --input: 220 14% 88%;
+    --ring: 217 84% 56%;
+    --critical: 348 71% 51%;
+    --high: 22 71% 50%;
+    --medium: 41 71% 42%;
+    --low: 153 65% 36%;
+    color-scheme: light;
+  }
+
+  * { border-color: hsl(var(--border)); }
+  body {
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  .bg-background { background-color: hsl(var(--background)); }
+  .bg-card { background-color: hsl(var(--card)); }
+  .bg-muted { background-color: hsl(var(--muted)); }
+  .bg-primary { background-color: hsl(var(--primary)); }
+  .bg-secondary { background-color: hsl(var(--secondary)); }
+  .bg-accent { background-color: hsl(var(--accent)); }
+  .bg-destructive { background-color: hsl(var(--destructive)); }
+  .bg-popover { background-color: hsl(var(--popover)); }
+  .text-foreground { color: hsl(var(--foreground)); }
+  .text-card-foreground { color: hsl(var(--card-foreground)); }
+  .text-muted-foreground { color: hsl(var(--muted-foreground)); }
+  .text-primary { color: hsl(var(--primary)); }
+  .text-primary-foreground { color: hsl(var(--primary-foreground)); }
+  .text-destructive { color: hsl(var(--destructive)); }
+  .text-destructive-foreground { color: hsl(var(--destructive-foreground)); }
+  .text-popover-foreground { color: hsl(var(--popover-foreground)); }
+  .text-accent-foreground { color: hsl(var(--accent-foreground)); }
+  .text-secondary-foreground { color: hsl(var(--secondary-foreground)); }
+  .border-border { border-color: hsl(var(--border)); }
+  .border-input { border-color: hsl(var(--input)); }
+  .ring-ring { --tw-ring-color: hsl(var(--ring)); }
+  .text-critical { color: hsl(var(--critical)); }
+  .text-high { color: hsl(var(--high)); }
+  .text-medium { color: hsl(var(--medium)); }
+  .text-low { color: hsl(var(--low)); }
+  .bg-critical { background-color: hsl(var(--critical)); }
+  .bg-high { background-color: hsl(var(--high)); }
+  .bg-medium { background-color: hsl(var(--medium)); }
+  .bg-low { background-color: hsl(var(--low)); }
+}
+
+@layer components {
+  .md { line-height: 1.65; color: hsl(var(--foreground)); }
+  .md h3 { font-size: 16px; font-weight: 600; margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid hsl(var(--border)); }
+  .md h4 { font-size: 14px; font-weight: 600; margin: 14px 0 6px; }
+  .md h5, .md h6 { font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
+  .md p { margin: 8px 0; }
+  .md ul { margin: 8px 0; padding-left: 22px; }
+  .md li { margin: 3px 0; }
+  .md a { color: hsl(var(--primary)); }
+  .md code {
+    background: hsl(var(--muted)); padding: 1px 6px; border-radius: 3px;
+    font-size: 12px; font-family: var(--font-mono);
+  }
+  .md pre {
+    background: hsl(var(--muted)); padding: 12px 14px; border-radius: 6px;
+    overflow: auto; border: 1px solid hsl(var(--border));
+    font-size: 12px;
+  }
+  .md pre code { background: transparent; padding: 0; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin { animation: spin 1.2s linear infinite; }
+}
