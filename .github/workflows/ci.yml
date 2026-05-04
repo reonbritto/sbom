@@ -256,12 +256,9 @@ jobs:
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
-    # On PR: depends on quality jobs (they run; this waits).
-    # On main: those quality jobs are skipped by their own if:; we depend on
-    # nothing and run unconditionally.
-    needs: [lint, typecheck-build, test, sast, sca, secrets, audit, sbom, trivy-fs]
-    if: |
-      always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    # No `needs:` so this runs on both PRs and pushes to main without
+    # dependency-graph weirdness. PR quality is enforced by branch protection
+    # (the quality jobs are required checks at the GitHub repo level).
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -305,7 +302,6 @@ jobs:
     name: Trivy Container Scan
     runs-on: ubuntu-latest
     needs: [docker-build]
-    if: needs.docker-build.result == 'success'
     permissions:
       contents: read
       security-events: write
@@ -364,11 +360,7 @@ jobs:
     name: Docker Push
     runs-on: ubuntu-latest
     needs: [docker-build, trivy-scan]
-    if: |
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main' &&
-      needs.docker-build.result == 'success' &&
-      needs.trivy-scan.result == 'success'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Download Docker image artifact
         uses: actions/download-artifact@v8
