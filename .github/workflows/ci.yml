@@ -183,9 +183,19 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund --legacy-peer-deps
       - name: Generate CycloneDX SBOM (JSON)
-        run: npx --yes @cyclonedx/cyclonedx-npm --output-file sbom.json --output-format JSON --omit dev
+        run: |
+          npx --yes @cyclonedx/cyclonedx-npm \
+            --output-file sbom.json \
+            --output-format JSON \
+            --omit dev \
+            --ignore-npm-errors
       - name: Generate CycloneDX SBOM (XML)
-        run: npx --yes @cyclonedx/cyclonedx-npm --output-file sbom.xml --output-format XML --omit dev
+        run: |
+          npx --yes @cyclonedx/cyclonedx-npm \
+            --output-file sbom.xml \
+            --output-format XML \
+            --omit dev \
+            --ignore-npm-errors
       - name: Summary
         run: |
           node -e "
