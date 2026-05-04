@@ -24,7 +24,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "ioredis": "^5.4.1",
-    "lucide-react": "^0.460.0",
+    "lucide-react": "^1.14.0",
     "next": "^15.5.15",
     "p-limit": "^6.1.0",
     "prom-client": "^15.1.3",
