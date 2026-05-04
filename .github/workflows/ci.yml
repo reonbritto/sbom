@@ -312,15 +312,30 @@ jobs:
           name: docker-image
           path: /tmp
 
-      - name: Load image into local docker
+      - name: Load image and re-tag for scanning
+        id: load
         run: |
+          set -euo pipefail
           docker load --input /tmp/image.tar
-          docker images --format '{{.Repository}}:{{.Tag}}' | grep ${{ env.IMAGE_NAME }} || true
+          # Pick the first loaded tag and re-tag it locally so Trivy has a
+          # stable, non-secret reference to scan.
+          loaded=$(docker images --format '{{.Repository}}:{{.Tag}}' \
+            | grep -v '<none>' \
+            | grep -E "${{ env.IMAGE_NAME }}|sbom-vuln-analyzer" \
+            | head -1)
+          if [ -z "$loaded" ]; then
+            echo "::error ::no image loaded from /tmp/image.tar"
+            docker images
+            exit 1
+          fi
+          echo "Loaded: $loaded"
+          docker tag "$loaded" local/sbom-app:scan
+          docker images local/sbom-app:scan
 
       - name: Trivy image scan (SARIF, advisory)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ needs.docker-build.outputs.image-ref }}
+          image-ref: local/sbom-app:scan
           format: sarif
           severity: CRITICAL,HIGH
           output: trivy-image.sarif
@@ -338,7 +353,7 @@ jobs:
       - name: Trivy image scan (table — readable summary)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ needs.docker-build.outputs.image-ref }}
+          image-ref: local/sbom-app:scan
           format: table
           severity: CRITICAL,HIGH
           exit-code: '0'
@@ -346,7 +361,7 @@ jobs:
       - name: Trivy GATE (fixable CRITICAL/HIGH = fail)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ needs.docker-build.outputs.image-ref }}
+          image-ref: local/sbom-app:scan
           format: table
           severity: CRITICAL,HIGH
           ignore-unfixed: true
