@@ -118,3 +118,4 @@ All external API responses are cached in Redis (1 h for OSV component queries, 2
 ## License
 
 [MIT](LICENSE)
+<!-- branch protection smoke test -->
