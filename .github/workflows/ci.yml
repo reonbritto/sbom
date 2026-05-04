@@ -362,7 +362,7 @@ jobs:
       # to the Security tab + summarized in logs, but do not block the build.
 
   # ──────────────────────────────────────────────
-  # 3) PUSH — only on main, only if scan passed
+  # 3) PUSH — only on main
   # ──────────────────────────────────────────────
   docker-push:
     name: Docker (push to DockerHub)
@@ -372,14 +372,59 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Verify required secrets are present
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DH_USER:-}" ]; then
+            echo "::error ::DOCKERHUB_USERNAME secret is not set"
+            exit 1
+          fi
+          if [ -z "${DH_TOKEN:-}" ]; then
+            echo "::error ::DOCKERHUB_TOKEN secret is not set"
+            exit 1
+          fi
+          echo "DH_USER length=${#DH_USER}, DH_TOKEN length=${#DH_TOKEN}"
+
       - name: Download image artifact
         uses: actions/download-artifact@v4
         with:
           name: docker-image
           path: /tmp
 
-      - name: Load image into local docker
-        run: docker load --input /tmp/image.tar
+      - name: Load image and compute tags
+        id: tags
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: |
+          set -euo pipefail
+          docker load --input /tmp/image.tar
+          echo "Loaded images:"
+          docker images --format '  {{.Repository}}:{{.Tag}}'
+
+          SHORT=sha-$(echo ${{ github.sha }} | cut -c1-7)
+          # Pick whatever the loaded tag is (the build step tagged it via metadata-action)
+          loaded=$(docker images --format '{{.Repository}}:{{.Tag}}' \
+            | grep -v '<none>' \
+            | grep -E "${IMAGE_NAME}|${DH_USER}" \
+            | head -1)
+          if [ -z "$loaded" ]; then
+            echo "::error ::no image found after docker load"
+            docker images
+            exit 1
+          fi
+          echo "Loaded reference: $loaded"
+
+          # Re-tag for DockerHub regardless of what the build step originally produced.
+          docker tag "$loaded" "${DH_USER}/${IMAGE_NAME}:latest"
+          docker tag "$loaded" "${DH_USER}/${IMAGE_NAME}:${SHORT}"
+
+          echo "latest=${DH_USER}/${IMAGE_NAME}:latest"  >> $GITHUB_OUTPUT
+          echo "sha=${DH_USER}/${IMAGE_NAME}:${SHORT}"   >> $GITHUB_OUTPUT
+          echo "::notice ::Will push ${DH_USER}/${IMAGE_NAME}:latest and :${SHORT}"
 
       - name: Login to DockerHub
         uses: docker/login-action@v3
@@ -387,10 +432,13 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Push to DockerHub
+      - name: Push :latest
+        run: docker push "${{ steps.tags.outputs.latest }}"
+
+      - name: Push :sha-xxxxxxx
+        run: docker push "${{ steps.tags.outputs.sha }}"
+
+      - name: Done
         run: |
-          while IFS= read -r tag; do
-            [ -z "$tag" ] && continue
-            echo "Pushing $tag"
-            docker push "$tag"
-          done <<< "${{ needs.docker-build.outputs.tags }}"
+          echo "::notice ::Pushed: ${{ steps.tags.outputs.latest }}"
+          echo "::notice ::Pushed: ${{ steps.tags.outputs.sha }}"
