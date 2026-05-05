@@ -247,9 +247,7 @@ jobs:
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
-    # No `needs:` so this runs on both PRs and pushes to main without
-    # dependency-graph weirdness. PR quality is enforced by branch protection
-    # (the quality jobs are required checks at the GitHub repo level).
+    needs: [lint, typecheck-build, test, sast, sca, secrets, audit, sbom, trivy-fs]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
