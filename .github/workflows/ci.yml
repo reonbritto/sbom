@@ -25,7 +25,6 @@ jobs:
   lint:
     name: Lint (ESLint)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -43,7 +42,6 @@ jobs:
   typecheck-build:
     name: TypeCheck & Build
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -68,7 +66,6 @@ jobs:
   test:
     name: Tests (Vitest)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -86,7 +83,6 @@ jobs:
   sast:
     name: SAST (CodeQL)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     permissions:
       security-events: write
       actions: read
@@ -108,7 +104,6 @@ jobs:
   sca:
     name: SCA (Snyk)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     permissions:
       security-events: write
       contents: read
@@ -149,7 +144,6 @@ jobs:
   secrets:
     name: Secrets (Gitleaks)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -164,7 +158,6 @@ jobs:
   audit:
     name: npm audit
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -182,7 +175,6 @@ jobs:
   sbom:
     name: SBOM (CycloneDX)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -228,7 +220,6 @@ jobs:
   trivy-fs:
     name: Trivy (filesystem)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     permissions:
       security-events: write
       contents: read
