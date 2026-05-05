@@ -109,8 +109,17 @@ resource "azurerm_role_assignment" "caller_cluster_admin" {
 #  Azure Key Vault
 # ─────────────────────────────────────────────────────────
 
+# KV names are globally unique. Suffix avoids collisions if the chosen name is
+# already taken (or recently soft-deleted).
+resource "random_string" "kv_suffix" {
+  length  = 5
+  upper   = false
+  special = false
+  numeric = true
+}
+
 resource "azurerm_key_vault" "main" {
-  name                       = var.key_vault_name
+  name                       = "${var.key_vault_name}-${random_string.kv_suffix.result}"
   location                   = azurerm_resource_group.main.location
   resource_group_name        = azurerm_resource_group.main.name
   tenant_id                  = data.azurerm_client_config.current.tenant_id
@@ -214,7 +223,6 @@ resource "azurerm_role_assignment" "eso_kv_reader" {
 
 resource "azurerm_federated_identity_credential" "eso" {
   name                      = "fc-sbom-eso"
-  resource_group_name       = azurerm_resource_group.main.name
   user_assigned_identity_id = azurerm_user_assigned_identity.eso.id
   audience                  = ["api://AzureADTokenExchange"]
   issuer                    = azurerm_kubernetes_cluster.main.oidc_issuer_url
@@ -241,9 +249,98 @@ resource "azurerm_role_assignment" "external_dns_zone" {
 
 resource "azurerm_federated_identity_credential" "external_dns" {
   name                      = "fc-sbom-external-dns"
-  resource_group_name       = azurerm_resource_group.main.name
   user_assigned_identity_id = azurerm_user_assigned_identity.external_dns.id
   audience                  = ["api://AzureADTokenExchange"]
   issuer                    = azurerm_kubernetes_cluster.main.oidc_issuer_url
   subject                   = "system:serviceaccount:${var.external_dns_namespace}:external-dns-sa"
+}
+
+# cert-manager reuses the ExternalDNS MI for DNS-01 ACME challenges (same
+# DNS Zone Contributor role on reon.buzz). Separate FIC because the K8s
+# ServiceAccount running cert-manager is different from external-dns-sa.
+resource "azurerm_federated_identity_credential" "cert_manager" {
+  name                      = "fc-sbom-cert-manager"
+  user_assigned_identity_id = azurerm_user_assigned_identity.external_dns.id
+  audience                  = ["api://AzureADTokenExchange"]
+  issuer                    = azurerm_kubernetes_cluster.main.oidc_issuer_url
+  subject                   = "system:serviceaccount:cert-manager:cert-manager"
+}
+
+# ─────────────────────────────────────────────────────────
+#  Observability — Azure Storage for LGTM (Loki/Tempo/Mimir)
+# ─────────────────────────────────────────────────────────
+
+# Storage account names: 3-24 chars, lowercase + digits, globally unique.
+resource "random_string" "obs_suffix" {
+  length  = 6
+  upper   = false
+  special = false
+  numeric = true
+}
+
+resource "azurerm_storage_account" "observability" {
+  name                            = "stsbomobs${random_string.obs_suffix.result}"
+  resource_group_name             = azurerm_resource_group.main.name
+  location                        = azurerm_resource_group.main.location
+  account_tier                    = "Standard"
+  account_replication_type        = "LRS"
+  account_kind                    = "StorageV2"
+  min_tls_version                 = "TLS1_2"
+  allow_nested_items_to_be_public = false
+  shared_access_key_enabled       = true # Loki/Tempo/Mimir support both AAD and key auth; keep both available
+
+  blob_properties {
+    versioning_enabled = false
+  }
+
+  tags = azurerm_resource_group.main.tags
+}
+
+resource "azurerm_storage_container" "loki" {
+  name                  = "loki"
+  storage_account_id    = azurerm_storage_account.observability.id
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_container" "tempo" {
+  name                  = "tempo"
+  storage_account_id    = azurerm_storage_account.observability.id
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_container" "mimir" {
+  name                  = "mimir"
+  storage_account_id    = azurerm_storage_account.observability.id
+  container_access_type = "private"
+}
+
+resource "azurerm_user_assigned_identity" "observability" {
+  name                = "id-sbom-observability"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+
+  tags = azurerm_resource_group.main.tags
+}
+
+resource "azurerm_role_assignment" "observability_blob_contributor" {
+  scope                = azurerm_storage_account.observability.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_user_assigned_identity.observability.principal_id
+}
+
+# Single federated credential mapped to a shared SA name; all of Loki/Tempo/Mimir
+# can use the same SA (`obs-sa`) in the observability namespace.
+resource "azurerm_federated_identity_credential" "observability" {
+  name                      = "fc-sbom-observability"
+  user_assigned_identity_id = azurerm_user_assigned_identity.observability.id
+  audience                  = ["api://AzureADTokenExchange"]
+  issuer                    = azurerm_kubernetes_cluster.main.oidc_issuer_url
+  subject                   = "system:serviceaccount:${var.observability_namespace}:obs-sa"
+}
+
+# Caller can read storage keys for emergency / bootstrap.
+resource "azurerm_role_assignment" "caller_storage_account_contrib" {
+  scope                = azurerm_storage_account.observability.id
+  role_definition_name = "Storage Account Contributor"
+  principal_id         = data.azurerm_client_config.current.object_id
 }
