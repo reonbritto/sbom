@@ -226,7 +226,11 @@ resource "azurerm_federated_identity_credential" "eso" {
   user_assigned_identity_id = azurerm_user_assigned_identity.eso.id
   audience                  = ["api://AzureADTokenExchange"]
   issuer                    = azurerm_kubernetes_cluster.main.oidc_issuer_url
-  subject                   = "system:serviceaccount:${var.app_namespace}:eso-service-account"
+  # ESO runs in its own namespace (external-secrets), NOT in app_namespace.
+  # Earlier this used `${var.app_namespace}:eso-service-account` which produced
+  # `sbom:eso-service-account` — wrong. AAD rejected the token swap with
+  # AADSTS700213.
+  subject = "system:serviceaccount:external-secrets:eso-service-account"
 }
 
 # ─────────────────────────────────────────────────────────
