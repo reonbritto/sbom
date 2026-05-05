@@ -80,6 +80,14 @@ resource "azurerm_kubernetes_cluster" "main" {
   oidc_issuer_enabled       = true
   workload_identity_enabled = true
 
+  # The cluster autoscaler mutates node_count out from under Terraform.
+  # Without this, every `terraform apply` after the autoscaler runs will try
+  # to reset the count and azurerm refuses ("cannot change node_count when
+  # auto_scaling_enabled is set to true"). Ignore the live count.
+  lifecycle {
+    ignore_changes = [default_node_pool[0].node_count]
+  }
+
   network_profile {
     network_plugin    = "azure"
     network_policy    = "azure"

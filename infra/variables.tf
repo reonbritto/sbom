@@ -66,9 +66,9 @@ variable "node_min_count" {
 }
 
 variable "node_max_count" {
-  description = "Maximum node count for autoscaler"
+  description = "Maximum node count for autoscaler. LGTM stack alone needs ~3 nodes worth of CPU on Standard_D2as_v5."
   type        = number
-  default     = 2
+  default     = 4
 }
 
 variable "key_vault_name" {
@@ -117,4 +117,10 @@ variable "external_dns_namespace" {
   description = "Kubernetes namespace where ExternalDNS will run"
   type        = string
   default     = "external-dns"
+}
+
+variable "observability_namespace" {
+  description = "Kubernetes namespace where the LGTM stack runs"
+  type        = string
+  default     = "observability"
 }
