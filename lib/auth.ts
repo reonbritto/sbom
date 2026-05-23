@@ -20,7 +20,14 @@ export const auth = betterAuth({
     updateAge: 60 * 60 * 24,
     cookieCache: { enabled: true, maxAge: 60 * 5 },
   },
-  trustedOrigins: [process.env.BETTER_AUTH_URL ?? 'http://localhost:3000'],
+  trustedOrigins: [
+    process.env.BETTER_AUTH_URL ?? 'http://localhost:3000',
+    // Browsers sometimes resolve localhost -> 127.0.0.1 (or vice versa) depending
+    // on OS / hosts file / IPv6 settings. Trust both forms to avoid spurious
+    // "Invalid origin" rejections during local dev.
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+  ],
   plugins: [nextCookies()],
 });
 
